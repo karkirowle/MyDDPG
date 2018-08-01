@@ -1,0 +1,16 @@
+import tensorflow as tf
+import numpy as np
+
+from actorNetwork import ActorNetwork
+from criticNetwork import CriticNetwork
+# DDPG Implementation
+
+# Quick pseudocodish view 
+
+# Target actor
+targetActor = ActorNetwork(3,5)
+targetCritic = CriticNetwork(3,10)
+
+# Non-target
+actor = ActorNetwork(3,5)
+critic = CriticNetwork(3,10)
