@@ -32,18 +32,33 @@ class CriticNetwork():
         self.b3 = self.endVariables(1,action_dimension,"b3")
         self.l3 = tf.identity(tf.matmul(self.l2, self.w3) + self.b3);
 
- # Performs the square root uniform initialisation described in the Supplementary Materials
+    def copy_weights(self,network):
+        self.w1 = self.w1.assign(network.w1)
+        self.b1 = self.b1.assign(network.b1)
+        self.l1 = tf.nn.relu(tf.matmul(self.state_in, self.w1) + self.b1);
+        self.w2 = self.w2.assign(network.w2)
+        self.w3 = self.w3.assign(network.w3)
+        self.b2 = self.b2.assign(network.b2)
+        self.b3 = self.b3.assign(network.b3)
+        self.actionw1 = self.actionw1.assign(network.actionw1)
+        self.l2 = tf.nn.relu(tf.matmul(self.l1, self.w2) +
+                             tf.matmul(self.action_in,self.actionw1) +
+                             self.b2);
+        self.l3 = tf.identity(tf.matmul(self.l2, self.w3) + self.b3)
+
+# Performs the square root uniform initialisation described in the Supplementary Materials
     def faninVariables(self,dimensionx,dimensiony,name):
         return tf.get_variable(self.name + name, initializer =
                                np.random.uniform(-1/np.sqrt(dimensionx),
                                                  1/np.sqrt(dimensionx),
                                                  (dimensionx,dimensiony)))
-    
-     # Performs the 3*10e-3 initialisation of the end layer preceding tanh
-    def endVariables(self,dimensionx,dimensiony,name):
-          return tf.get_variable(self.name + name,initializer =
-                          np.random.uniform(-3*(1e-3),
-                                            3*(1e-3),
-                                           (dimensionx,dimensiony)))
 
-  
+    # Performs the 3*10e-3 initialisation of the end layer preceding tanh
+    def endVariables(self,dimensionx,dimensiony,name):
+        return tf.get_variable(self.name + name,initializer =
+                               np.random.uniform(-3*(1e-3),
+                                                 3*(1e-3),
+                                                 (dimensionx,dimensiony)))
+
+    def sampleValue(self,sess,state,policy):
+        print(state)
