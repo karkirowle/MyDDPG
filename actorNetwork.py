@@ -15,20 +15,31 @@ class ActorNetwork():
             self.state_dimension = state_dimension
             self.action_dimension = action_dimension
             # First Hidden Layer with ReLu nonlineary
-            self.state_in = tf.placeholder("float64",[None, state_dimension], name+"state_in")
-            self.w1 = self.faninVariables(state_dimension,layer1,"w1");
-            self.b1 = self.faninVariables(1,layer1,"b1")
-            self.l1 = tf.nn.relu(tf.matmul(self.state_in, self.w1) + self.b1);
-
+            with tf.name_scope("Actor_Network_Layer1_"+name) as scope:
+                self.state_in = tf.placeholder("float64",[None, state_dimension], name+"state_in")
+                self.w1 = self.faninVariables(state_dimension,layer1,"w1");
+                tf.summary.histogram(self.w1.op.name, self.w1)
+                self.b1 = self.faninVariables(1,layer1,"b1")
+                tf.summary.histogram(self.b1.op.name, self.b1)
+                self.l1 = tf.nn.relu(tf.matmul(self.state_in, self.w1) + self.b1); 
+                tf.summary.histogram(self.l1.op.name, self.l1)
             # Second Hidden Layer with ReLu nonlinearity
-            self.w2 = self.faninVariables(layer1,layer2,"w2");
-            self.b2 = self.faninVariables(1,layer2,"b2");
-            self.l2 = tf.nn.relu(tf.matmul(self.l1, self.w2) + self.b2);
+            with tf.name_scope("Actor_Network_Layer2_"+name) as scope:
+                self.w2 = self.faninVariables(layer1,layer2,"w2");
+                tf.summary.histogram(self.w2.op.name, self.w2)
+                self.b2 = self.faninVariables(1,layer2,"b2");
+                tf.summary.histogram(self.b2.op.name, self.b2)
+                self.l2 = tf.nn.relu(tf.matmul(self.l1, self.w2) + self.b2);
+                tf.summary.histogram(self.l2.op.name, self.l2)
 
             # Last Hidden Layer with tanh nonlinearity
-            self.w3 = self.endVariables(layer2,action_dimension,"w3")
-            self.b3 = self.endVariables(1,action_dimension,"b3")
-            self.l3 = tf.tanh(tf.matmul(self.l2, self.w3) + self.b3);
+            with tf.name_scope("Actor_Network_Layer3_"+name) as scope:
+                self.w3 = self.endVariables(layer2,action_dimension,"w3")
+                tf.summary.histogram(self.w3.op.name, self.w3)
+                self.b3 = self.endVariables(1,action_dimension,"b3")
+                tf.summary.histogram(self.b3.op.name, self.b3)
+                self.l3 = tf.tanh(tf.matmul(self.l2, self.w3) + self.b3);
+                tf.summary.histogram(self.l3.op.name, self.l3)
 
             # Gradient optimisation - I don't completely understand what is going on here
             self.q_gradient_input = tf.placeholder("float64",
@@ -45,43 +56,53 @@ class ActorNetwork():
                                                self.b2,self.b3]))
 
 
-    def copy_weights2(self,sess,network,tau):
-        sess.run([self.w1.assign((1-tau)*self.w1 + tau*network.w1),
-                  self.b1.assign((1-tau)*self.b1 + tau*network.b1),
-                  self.w2.assign((1-tau)*self.w2 + tau*network.w2),
-                  self.w3.assign((1-tau)*self.w3 + tau*network.w3),
-                  self.b2.assign((1-tau)*self.b2 + tau*network.b2),
-                  self.b3.assign((1-tau)*self.b3 + tau*network.b3)])
-    def copy_weights(self,sess,network,tau):
-        # Add tau times new, (1-tau) times old
-        self.w1 = tf.Variable(sess.run((1-tau)*self.w1 +  tau*network.w1))
-        self.b1 = tf.Variable(sess.run((1-tau)*self.b1 + tau*network.b1))
-        self.l1 = tf.nn.relu(tf.matmul((1-tau)*self.state_in, self.w1) + self.b1);
-        self.w2 = tf.Variable(sess.run((1-tau)*self.w2 + tau*network.w2))
-        self.w3 = tf.Variable(sess.run((1-tau)*self.w3 + tau*network.w3))
-        self.b2 = tf.Variable(sess.run((1-tau)*self.b2 + tau*network.b2))
-        self.b3 = tf.Variable(sess.run((1-tau)*self.b3 + tau*network.b3))
-        self.l2 = tf.nn.relu(tf.matmul(self.l1, self.w2) + self.b2);
-        self.l3 = tf.tanh(tf.matmul(self.l2, self.w3) + self.b3)
-        sess.run(tf.variables_initializer([self.w1,self.b1,self.w2,self.w3,
-                                           self.b2,self.b3]))
+    def copy_network(self,tau):
+        ema = tf.train.ExponentialMovingAverage(decay=1-tau)
 
- # Performs the square root uniform initialisation described in the Supplementary Materials
+        # This names for which variables we wish to maintain a control of EMA
+        self.update = ema.apply([self.w1,self.b1,self.w2,
+                            self.b2,self.w3,self.b3])
+
+        # This obtains the reference for the shadow variables from the Ema OP
+        target_net = [ema.average(x) for x in [self.w1, self.b1,
+                                               self.w2,self.b2,
+                                               self.w3,self.b3]]
+        w1 = target_net[0]
+        b1 = target_net[1]
+        w2 = target_net[2]
+        b2 = target_net[3]
+        w3 = target_net[4]
+        b3 = target_net[5]
+        # Construct target neural network graph
+        layer1 = tf.nn.relu(tf.matmul(self.state_in,w1) + b1)
+        layer2 = tf.nn.relu(tf.matmul(layer1,w2) + b2)
+
+        # This needs to be evaluated for a feedforward run
+        self.target_output = tf.tanh(tf.matmul(layer2,w3) + b3)
+
+    def evaluate_target(self,sess,cur_obs):
+        # Calling this evaluates the target networks weights
+        return sess.run(self.target_output, feed_dict = { self.state_in: cur_obs })
+
+    def update_target(self,sess):
+        # Calling this will maintain control of new target network copy
+        sess.run(self.update)
+
+
+    # Performs the square root uniform initialisation described in the Supplementary Materials
     def faninVariables(self,dimensionx,dimensiony,name):
         return tf.get_variable(self.name + name, initializer =
                                np.random.uniform(-1/np.sqrt(dimensionx),
                                                  1/np.sqrt(dimensionx),
                                                  (dimensionx,dimensiony)))
-    
-     # Performs the 3*10e-3 initialisation of the end layer preceding tanh
+
+    # Performs the 3*10e-3 initialisation of the end layer preceding tanh
     def endVariables(self,dimensionx,dimensiony,name):
           return tf.get_variable(self.name + name,initializer =
-                          np.random.uniform(-3*(1e-3),
-                                            3*(1e-3),
+                          np.random.uniform(-3e-3,
+                                            3e-3,
                                            (dimensionx,dimensiony)))
 
     # Method responsible for creating the target network using weights from another network
-        
-        
     def sampleAction(self,state,sess):
             return sess.run(self.l3, feed_dict = {self.state_in: state})
