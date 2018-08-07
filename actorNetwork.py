@@ -4,7 +4,7 @@ import numpy as np
 # Parameters from supplementary materials of the paper
 layer1 = 400;
 layer2 = 300;
-learning_rate = 1e-4
+learning_rate = 1e-3
 
 class ActorNetwork():
 
@@ -18,28 +18,20 @@ class ActorNetwork():
             with tf.name_scope("Actor_Network_Layer1_"+name) as scope:
                 self.state_in = tf.placeholder("float64",[None, state_dimension], name+"state_in")
                 self.w1 = self.faninVariables(state_dimension,layer1,"w1");
-                tf.summary.histogram(self.w1.op.name, self.w1)
                 self.b1 = self.faninVariables(1,layer1,"b1")
-                tf.summary.histogram(self.b1.op.name, self.b1)
                 self.l1 = tf.nn.relu(tf.matmul(self.state_in, self.w1) + self.b1); 
-                tf.summary.histogram(self.l1.op.name, self.l1)
             # Second Hidden Layer with ReLu nonlinearity
             with tf.name_scope("Actor_Network_Layer2_"+name) as scope:
                 self.w2 = self.faninVariables(layer1,layer2,"w2");
-                tf.summary.histogram(self.w2.op.name, self.w2)
                 self.b2 = self.faninVariables(1,layer2,"b2");
-                tf.summary.histogram(self.b2.op.name, self.b2)
                 self.l2 = tf.nn.relu(tf.matmul(self.l1, self.w2) + self.b2);
-                tf.summary.histogram(self.l2.op.name, self.l2)
 
             # Last Hidden Layer with tanh nonlinearity
             with tf.name_scope("Actor_Network_Layer3_"+name) as scope:
                 self.w3 = self.endVariables(layer2,action_dimension,"w3")
-                tf.summary.histogram(self.w3.op.name, self.w3)
                 self.b3 = self.endVariables(1,action_dimension,"b3")
-                tf.summary.histogram(self.b3.op.name, self.b3)
-                self.l3 = tf.tanh(tf.matmul(self.l2, self.w3) + self.b3);
-                tf.summary.histogram(self.l3.op.name, self.l3)
+                # Hard-coded 2 for the action interval [-2,2]
+                self.l3 = tf.multiply(tf.tanh(tf.matmul(self.l2, self.w3) + self.b3), np.float64(2));
 
             # Gradient optimisation - I don't completely understand what is going on here
             self.q_gradient_input = tf.placeholder("float64",
@@ -73,12 +65,13 @@ class ActorNetwork():
         b2 = target_net[3]
         w3 = target_net[4]
         b3 = target_net[5]
+        
         # Construct target neural network graph
         layer1 = tf.nn.relu(tf.matmul(self.state_in,w1) + b1)
         layer2 = tf.nn.relu(tf.matmul(layer1,w2) + b2)
 
         # This needs to be evaluated for a feedforward run
-        self.target_output = tf.tanh(tf.matmul(layer2,w3) + b3)
+        self.target_output = tf.multiply(tf.tanh(tf.matmul(layer2,w3) + b3),np.float64(2))
 
     def evaluate_target(self,sess,cur_obs):
         # Calling this evaluates the target networks weights

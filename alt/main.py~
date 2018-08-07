@@ -1,0 +1,95 @@
+from collections import deque
+import random
+import numpy as np
+import tflearn
+
+class ReplayBuffer(object):
+
+    def __init__(self, buffer_size):
+        # Maintains a buffer and iterator at initialisation
+        self.buffer_size = buffer_size
+        self.count = 0
+        self.buffer = deque
+    def add(self,s,a,r,t,s2):
+        experience = (s,a,r,t,s2)
+        # Still place? Fill it
+        if self.count < self.buffer_size:
+            self.buffer.append(experience)
+            self.count += 1
+        else:
+            self.buffer.popleft()
+            self.buffer.append(experience)
+
+    def size(self):
+        return self.count
+
+    def sample_batch(self, batch_size):
+        batch = []
+
+        if self.count < batch_size:
+            batch = random.sample(self.buffer,
+                                  self.count)
+        else:
+            batch = random.sample(self.buffer,
+                                  batch_size)
+
+        s_batch = np.array([_[0] for _ in batch])
+        a_batch = np.array([_[1] for _ in batch])
+        r_batch = np.array([_[2] for _ in batch])
+        s2_batch = np.array([_[4] for _ in batch])
+
+        return s_batch, a_batch, r_batch, t_batch
+
+    def clear(self):
+        self.buffer.clear()
+        self.count = 0
+
+class ActorNetwork(object):
+
+    def create_actor_network(self):
+        inputs = tflearn.input_data(
+            shape=[None, self.s_dim])
+        net = tflearn.fully_connected(
+            inputs,400)
+        net = tflearn.layers.normalization.batch_normalization(net)
+        net = tflearn.activations.relu(net)
+        net = tflearn.fully_connected(net,300)
+        net = tflearn.layers.normalization.batch_normalization(net)
+        # Final layer weights are init to uniform
+        w_init = tflearn.initializations.uniform(
+            minval=-0.003, maxval=0.003)
+        out = tflearn.fully_connected(
+            net, self.a_dim, activation='tanh',
+            weigths_init = w_init)
+        # Scale output to action_bound to action_bound
+        # NOTE: THIS IS DIFFERENT
+        scale_out = tf.multiply(out,
+                                self.action_bound)
+        return inputs, out, scaled_out
+
+class CriticNetwork(object):
+    def create_critic_network(self):
+        inputs = tflearn.input_data(
+            shape=[None,self.s_dim])
+        action = tflearn.input_data(
+            shape=[None,self.a_dim])
+        net = tflearn.fully_connected(inputs,
+                                      400)
+        net = tflearn.layers.normalization.batch_normalization(net)
+        net = tflearn.activations.relu(net)
+
+        t1 = tflearn.fully_connected(net,300)
+        t2 = tflearn.fully_connected(action,300)
+
+        net = tflearn.activation(
+            tf.matmul(net, t1.W) + tf.matmul(
+                action, t2.w) + t2.b, activation=
+            'relu')
+
+        w_init = tflearn.initialization.uniform(
+            minval=-0.003, maxval=0.003)
+        out = tflearn.fully_connected(net,
+                                      1,
+                                      weights_init=w_init)
+        return inputs, action, out
+    

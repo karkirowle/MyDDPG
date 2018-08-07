@@ -12,6 +12,6 @@ class Noise():
         self.noise_scale = 1;
         
     def sampleNoise(self,action_dimension,samples):
-        dx = self.theta * (self.mu-self.x) + self.sigma*np.random.randn(action_dimension);
-        self.x += self.noise_scale*dx;
+        self.x = self.theta * (self.mu-self.x) + self.sigma*np.random.randn(action_dimension);
+        #self.x += self.noise_scale*dx;
         return self.x;
